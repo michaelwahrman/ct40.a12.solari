@@ -1,0 +1,948 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CT40.A12.Solari</title>
+<!-- CT40.A12.Solari — split-flap (Solari) departure board, WebGL via three.js r160 loaded from ./lib (no internet needed).
+     A12: "● Record from Reset" makes an MP4 movie (picture + clacks) of the sign starting from a reset. -->
+<style>
+  :root { --label:#d8d6ce; --bar:#0d0d0d; --btn:#1c1c1c; --btnh:#2a2a2a; --txt:#e8e6de; --dim:#8a887f; }
+  html, body { margin:0; height:100%; background:#000; overflow:hidden; color:var(--txt);
+    font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; }
+  #gl { position:fixed; left:0; top:0; width:100vw; height:100vh; display:block; }
+  #labels { position:fixed; inset:0; pointer-events:none; }
+  .lab { position:absolute; white-space:nowrap; color:var(--label); font-weight:bold; letter-spacing:0.12em; }
+  #title { position:absolute; white-space:nowrap; color:var(--label); font-weight:bold; letter-spacing:0.2em; }
+  #bar { position:fixed; left:0; right:0; bottom:0; min-height:52px; padding-top:6px !important; padding-bottom:6px !important; row-gap:6px; background:var(--bar); border-top:1px solid #222;
+    display:flex; align-items:center; justify-content:center; gap:14px; flex-wrap:wrap; padding:0 12px; box-sizing:border-box;
+    font-size:13px; }
+  .grp { display:flex; align-items:center; gap:6px; }
+  button { background:var(--btn); color:var(--txt); border:1px solid #333; border-radius:4px; padding:6px 11px;
+    font:inherit; font-weight:bold; cursor:pointer; min-width:34px; }
+  button:hover { background:var(--btnh); }
+  button.on { border-color:#b9b39a; color:#fff; }
+  #speedv, #sizev { min-width:48px; text-align:center; font-variant-numeric:tabular-nums; font-weight:bold; }
+  input[type=range] { width:110px; accent-color:#bdb7a0; }
+  .sep { width:1px; height:26px; background:#2a2a2a; }
+  #src { color:var(--dim); font-size:11px; max-width:230px; line-height:1.25; }
+  #toast { position:fixed; left:50%; top:14px; transform:translateX(-50%); background:#1b1b1b; border:1px solid #444;
+    padding:8px 14px; border-radius:6px; font-size:13px; display:none; z-index:5; cursor:pointer; }
+  #err { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:#000; color:#f88;
+    font-size:15px; padding:30px; text-align:center; white-space:pre-wrap; }
+  #file { display:none; }
+  /* A12: recording */
+  #bRec.rec { background:#5a0d0d; border-color:#e04040; color:#fff; }
+  #bRec.busy { opacity:0.6; cursor:wait; }
+  #recv { color:#e06060; font-size:12px; font-variant-numeric:tabular-nums; min-width:0; }
+  /* A11: icon bands */
+  .decor { position:fixed; left:0; right:0; display:none; justify-content:center; align-items:center; box-sizing:border-box;
+    pointer-events:none; overflow:hidden; background:#000; }
+  #decTop { border-bottom:1px solid #2a2a2a; } #decBot { border-top:1px solid #2a2a2a; }
+  .decor img { display:block; flex:none; object-fit:contain; border-radius:3px; box-shadow:0 0 0 1px #262626; }
+</style>
+<script src="lib/three.r160.min.js"></script>
+<script src="CT40.A12.Solari.embedded.js"></script>
+<script src="CT40.A12.Solari.icons.js"></script>
+<script src="lib/mp4-muxer.5.2.1.js"></script>
+<script src="CT40.A12.Solari.rec.js"></script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="labels"><div id="title"></div></div>
+<div id="decTop" class="decor"></div>
+<div id="decBot" class="decor"></div>
+<div id="toast">Click anywhere to enable sound</div>
+<div id="bar">
+  <div class="grp">
+    <button id="bFwd" title="Forward / run (Space)">&#9654; Forward</button>
+    <button id="bStop" title="Stop (Space)">&#9632; Stop</button>
+    <button id="bReset" title="Reset to start time (R)">&#10227; Reset</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button id="bRec" title="Reset the sign and record an MP4 movie of it with sound; press again to stop and save (V)">&#9679; Rec from Reset</button>
+    <span id="recv"></span>
+  </div>
+  <div class="sep"></div>
+  <div class="grp" title="Clock speed (- / + keys, 1 = real time)">
+    Speed
+    <button id="bSlow">&minus;</button><span id="speedv">1.00&times;</span><button id="bFast">+</button>
+    <button id="b1x" title="Real time">1&times;</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp" title="Size of the clock and flaps; headings stay put ( [ / ] keys )">
+    Size
+    <button id="bSmall">&minus;</button><span id="sizev">70%</span><button id="bBig">+</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button id="bSnd" title="Sound on/off (M).  C = clock clack on/off">Sound ON</button>
+    <span>Vol</span><input id="vol" type="range" min="0" max="100" value="100">
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button id="bIcons" title="Icon bands along the top and bottom on / off (I)">Icons ON</button>
+    <button id="bLoad" title="Load edited fields/schedule JSON files">Load JSON&hellip;</button>
+    <input id="file" type="file" accept=".json,application/json" multiple>
+    <span id="src"></span>
+  </div>
+</div>
+<div id="err"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   CT40.A12.Solari
+   - fields JSON  : drums, field types, columns, board look, clock, sound
+   - schedule JSON: labels, start/end time, timed row events
+   Board state at clock time T = every event with t <= T applied in order.
+   Each character cell is a flap unit on a drum; it only ever advances
+   forward through its drum (A->E shows B, C, D), one flap per flapMs.
+   ===================================================================== */
+
+const NAME = 'CT40.A12.Solari';
+const QS = new URLSearchParams(location.search);
+const FIELDS_FILE = NAME + '.fields.json';
+const SCHEDULE_FILE = NAME + '.schedule.json';
+const SPEEDS = [0.1,0.2,0.25,0.3,0.4,0.5,0.6,0.7,0.75,0.8,0.9,1,1.1,1.2,1.25,1.3,1.4,1.5,1.75,2,2.5,3,4,5,6,8,10,15,20,30,60];
+
+const $ = id => document.getElementById(id);
+function fail(msg) { const e = $('err'); e.textContent = msg; e.style.display = 'flex'; throw new Error(msg); }
+if (!window.THREE) fail('lib/three.r160.min.js did not load. Keep the lib folder next to ' + NAME + '.html.');
+
+/* ---------- time helpers ---------- */
+function parseClock(s) {                       // "10:01 AM" / "9:58:05 PM" -> seconds after midnight
+  const m = String(s).trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp][Mm])$/);
+  if (!m) throw new Error('bad time "' + s + '"');
+  let h = +m[1] % 12; if (m[4].toUpperCase() === 'PM') h += 12;
+  return h * 3600 + (+m[2]) * 60 + (+(m[3] || 0));
+}
+function clockParts(sec) {
+  sec = Math.floor(((sec % 86400) + 86400) % 86400);
+  const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, s = sec % 60;
+  return { h12: (h % 12) || 12, m, s, ap: h < 12 ? 'AM' : 'PM' };
+}
+
+/* ---------- data loading (real files first, embedded copy if the browser blocks file://) ---------- */
+async function fetchJSON(url) {
+  const r = await fetch(url, { cache: 'no-store' });
+  if (!r.ok) throw new Error(url + ': HTTP ' + r.status);
+  return r.json();
+}
+async function loadData() {
+  const E = window.SOLARI_EMBEDDED;
+  try {
+    const [f, s] = await Promise.all([fetchJSON(FIELDS_FILE), fetchJSON(SCHEDULE_FILE)]);
+    return { fields: f, schedule: s, src: 'Reading ' + FIELDS_FILE + ' + ' + SCHEDULE_FILE };
+  } catch (e) {
+    if (!E) fail('Could not read the JSON files (' + e.message + ') and ' + NAME + '.embedded.js is missing.');
+    return { fields: E.fields, schedule: E.schedule,
+      src: 'Local file: using built-in JSON copy. Edited JSON? Use Load JSON or ' + NAME + '.serve.sh.' };
+  }
+}
+
+/* =====================================================================
+   Glyph atlas: every glyph of every drum painted once into a canvas.
+   Each tile = one whole flap face (dark plate, glyph, grey split line).
+   ===================================================================== */
+function buildAtlas(fields) {
+  const B = fields.board, C = B.colors, TH = 128, PAD = 4, AW = 2048;
+  const drums = fields.drums;
+  const tiles = [];                                 // {drum, glyph, w}
+  for (const [dn, d] of Object.entries(drums)) {
+    if (dn.startsWith('_')) continue;
+    const w = Math.round(TH * d.widthUnits * B.cellAspect);
+    for (const g of d.glyphs) tiles.push({ dn, g, w, plate: d.plate !== false, img: d.images && d.images[g] ? S.images[d.images[g]] : null, crop: d.imageCrop || 1 });
+  }
+  // pack
+  let x = PAD, y = PAD;
+  for (const t of tiles) {
+    if (x + t.w + PAD > AW) { x = PAD; y += TH + PAD * 2; }
+    t.x = x; t.y = y; x += t.w + PAD * 2;
+  }
+  let AH = 64; while (AH < y + TH + PAD) AH *= 2;
+  const cv = document.createElement('canvas'); cv.width = AW; cv.height = AH;
+  const g = cv.getContext('2d');
+  g.fillStyle = C.background; g.fillRect(0, 0, AW, AH);
+  const font = px => B.font.replace('{px}', px);
+  g.font = font(100);
+  const capH = (g.measureText('H').actualBoundingBoxAscent || 72) / 100;   // cap height per px of font size
+  const map = {};
+  for (const t of tiles) {
+    // plate
+    if (t.plate) {
+      const gr = g.createLinearGradient(0, t.y, 0, t.y + TH);
+      gr.addColorStop(0, C.flap); gr.addColorStop(0.49, C.flapEdge);
+      gr.addColorStop(0.51, C.flap); gr.addColorStop(1, C.flapEdge);
+      g.fillStyle = gr;
+    } else g.fillStyle = C.background;
+    g.fillRect(t.x - PAD, t.y - PAD, t.w + PAD * 2, TH + PAD * 2);   // bleed plate colour into the pad
+    // A11: a picture instead of a glyph (the sun / moon of the AM/PM flap): the whole image, fitted inside the plate
+    if (t.img) {
+      const im = t.img, side = Math.min(t.w, TH) * 0.9, cr = t.crop;              // cr: centre part of the picture used
+      const sw = im.naturalWidth * cr, sh = im.naturalHeight * cr, k = side / Math.max(sw, sh), iw = sw * k, ih = sh * k;
+      g.drawImage(im, (im.naturalWidth - sw) / 2, (im.naturalHeight - sh) / 2, sw, sh, t.x + (t.w - iw) / 2, t.y + (TH - ih) / 2, iw, ih);
+    } else
+    // glyph
+    if (t.g.trim()) {
+      const multi = t.g.length > 1;
+      const cap = TH * (multi ? 0.42 : 0.62);
+      const px = cap / capH;
+      g.font = font(px.toFixed(1));
+      g.fillStyle = C.glyph; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+      const mw = g.measureText(t.g).width, maxW = t.w * (multi ? 0.84 : 0.86);
+      const sx = Math.min(1, maxW / mw);                       // condense wide letters (W, M) like real flaps
+      g.save(); g.translate(t.x + t.w / 2, t.y + TH / 2 + cap / 2); g.scale(sx, 1);
+      g.fillText(t.g, 0, 0); g.restore();
+    }
+    // split line that bisects every flap face
+    if (t.plate) {
+      const lw = Math.max(2, Math.round(TH * 0.026));
+      g.fillStyle = '#000'; g.fillRect(t.x - PAD, t.y + TH / 2 - lw / 2 - 1, t.w + PAD * 2, lw + 2);
+      g.fillStyle = C.splitLine; g.fillRect(t.x - PAD, t.y + TH / 2 - lw / 2, t.w + PAD * 2, lw);
+    }
+    // uv rect: (u0, vBottom, u1, vTop); CanvasTexture flips Y so canvas top = v 1
+    (map[t.dn] = map[t.dn] || {})[t.g] = [
+      (t.x + 0.5) / AW, 1 - (t.y + TH - 0.5) / AH, (t.x + t.w - 0.5) / AW, 1 - (t.y + 0.5) / AH ];
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = true;
+  return { tex, map, canvas: cv };
+}
+
+/* =====================================================================
+   Flap renderer: one InstancedMesh, 3 instances per cell
+   kind 0 = upper static half, kind 1 = lower static half, kind 2 = falling flap
+   ===================================================================== */
+const VS = `
+attribute vec3 aCenter; attribute vec2 aSize; attribute float aKind;
+attribute vec4 aUVa; attribute vec4 aUVb; attribute float aAngle;
+varying vec2 vUv; varying float vShade;
+void main() {
+  float lx = position.x, ly = position.y, hh = aSize.y * 0.5;
+  vec3 p; vec4 r = aUVa; float shade = 1.0; float vmid;
+  if (aKind < 0.5) {
+    p = vec3(lx * aSize.x, ly * hh, 0.0);
+    vmid = (r.y + r.w) * 0.5; vUv = vec2(mix(r.x, r.z, lx + 0.5), mix(vmid, r.w, ly));
+  } else if (aKind < 1.5) {
+    p = vec3(lx * aSize.x, -ly * hh, 0.0);
+    vmid = (r.y + r.w) * 0.5; vUv = vec2(mix(r.x, r.z, lx + 0.5), mix(vmid, r.y, ly)); shade = 0.9;
+  } else {
+    if (aAngle < 0.0) { vUv = vec2(0.0); vShade = 0.0; gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+    float c = cos(aAngle), s = sin(aAngle);
+    p = vec3(lx * aSize.x, ly * hh * c, ly * hh * s + 1.0);
+    if (aAngle < 1.5707963) {                 // front of the leaf: old glyph, upper half
+      vmid = (r.y + r.w) * 0.5; vUv = vec2(mix(r.x, r.z, lx + 0.5), mix(vmid, r.w, ly));
+      shade = 0.35 + 0.65 * c;
+    } else {                                   // back of the leaf: new glyph, lower half
+      r = aUVb; vmid = (r.y + r.w) * 0.5; vUv = vec2(mix(r.x, r.z, lx + 0.5), mix(vmid, r.y, ly));
+      shade = 0.9 * (0.35 + 0.65 * -c);
+    }
+  }
+  vShade = shade;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(aCenter + p, 1.0);
+}`;
+const FS = `
+uniform sampler2D uAtlas; varying vec2 vUv; varying float vShade;
+void main() { gl_FragColor = vec4(texture2D(uAtlas, vUv).rgb * vShade, 1.0); }`;
+
+/* ---------- application state ---------- */
+const S = {
+  fields: null, schedule: null, atlas: null,
+  cells: [],            // every flap unit (board + clock)
+  rowCells: [],         // rowCells[row][colId] = [cell...]
+  clockCells: [],
+  columns: [],          // {id, x, w, cells template}
+  rows: [],             // current field values per row
+  events: [], evIdx: 0,
+  start: 0, end: 0, loop: true,
+  clock: 0, running: true, speedIdx: SPEEDS.indexOf(1),
+  mesh: null, geo: null, attrs: null,
+  layout: null, lastSec: -1, size: 0.7,
+};
+
+/* A12: movie recording state (see the recording section further down) */
+const REC = { take: null, starting: false, finishing: false, fps: Math.max(10, Math.min(60, +(QS.get('fps') || 60))), SR: 48000,
+  voices: [], W: 0, H: 0, comp: null, g: null, overlay: null, imgs: {} };
+
+const renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(0, 1, 0, -1, -1000, 1000);
+
+/* ---------- cells ---------- */
+function makeCell(drumName, row, colId, isClock) {
+  const d = S.fields.drums[drumName];
+  if (!d) fail('fields JSON: unknown drum "' + drumName + '"');
+  const c = { drum: drumName, glyphs: d.glyphs, index: new Map(d.glyphs.map((g, i) => [g, i])),
+    wu: d.widthUnits, cur: 0, target: 0, next: 0, flipping: false, t0: 0,
+    row, colId, isClock, x: 0, y: 0, w: 0, h: 0, i: S.cells.length };
+  if (d.glyphs.length === 1) c.static = true;
+  S.cells.push(c);
+  return c;
+}
+function cellsForType(col) {       // -> array of drum names / 'gap'
+  const t = S.fields.types[col.type];
+  if (!t) fail('fields JSON: unknown type "' + col.type + '" in column ' + col.id);
+  if (t.kind === 'text') return Array(col.length || 10).fill(t.drum);
+  if (t.cells) return t.cells.slice();
+  fail('fields JSON: type "' + col.type + '" needs kind "text" or a cells list');
+}
+
+function buildCells() {
+  S.cells = []; S.rowCells = []; S.clockCells = []; S.columns = [];
+  const F = S.fields, B = F.board;
+  for (const col of F.columns) S.columns.push({ id: col.id, def: col, spec: cellsForType(col) });
+  for (let r = 0; r < B.rows; r++) {
+    const rc = {};
+    for (const col of S.columns)
+      rc[col.id] = col.spec.map(dn => dn === 'gap' ? null : makeCell(dn, r, col.id, false));
+    S.rowCells.push(rc);
+  }
+  if (F.clock && F.clock.show !== false) {
+    const apd = (F.clock.ampmDrum && F.drums[F.clock.ampmDrum]) ? F.clock.ampmDrum : 'ampm';   // A11: letters (default) or sun / moon
+    const spec = ['digit','digit','colon','digit','digit','colon','digit','digit','gap',apd];
+    S.clockSpec = spec;
+    S.clockCells = spec.map(dn => dn === 'gap' ? null : makeCell(dn, -1, 'clock', true));
+  }
+}
+
+/* ---------- layout (CSS pixels, y down) ---------- */
+// Per-type spacing (A10): a field type may set its own cellGapUnits / gapUnits (e.g. the time field is spread out).
+function colGaps(col) {
+  const B = S.fields.board, t = (col && S.fields.types[col.def.type]) || {};
+  return { cg: t.cellGapUnits != null ? t.cellGapUnits : B.cellGapUnits, gg: t.gapUnits != null ? t.gapUnits : B.gapUnits };
+}
+function specWidth(spec, cg, gg) {     // width in units of a list of cells
+  let w = 0, n = 0;
+  for (const dn of spec) { w += dn === 'gap' ? gg : S.fields.drums[dn].widthUnits; n++; }
+  return w + Math.max(0, n - 1) * cg;
+}
+function layout() {
+  // Two scales since A7:
+  //   uL = label unit: title + column headings, fixed at board.labelSize of the full-window fit
+  //   u  = flap unit : master clock + flap rows, scaled by the Size control (board.size)
+  // Since A10 each column is as wide as the wider of its flaps and its heading, so a long heading
+  // ("DEPARTURE TIME") never runs into the next column.
+  const W = window.innerWidth, BAR0 = $('bar').offsetHeight || 52;
+  sizeDecor();
+  const DEC = decorH(), H = window.innerHeight - DEC, BAR = BAR0 + DEC;   // A11: the icon bands take DEC px at the top and above the bar
+  const B = S.fields.board, CL = S.fields.clock || {};
+  const LS = B.labelSize || 0.7;
+  const cellH = 1 / B.cellAspect;                  // in units (unit = one cell width)
+  const sc = CL.scale || 1.4;
+
+  // headings: create them, and measure each one's width per px of font size
+  const labels = $('labels');
+  labels.querySelectorAll('.lab').forEach(n => n.remove());
+  const labEls = S.columns.map(col => {
+    const el = document.createElement('div'); el.className = 'lab';
+    el.textContent = (S.schedule.labels && S.schedule.labels[col.id]) || col.id.toUpperCase();
+    el.style.fontSize = '100px'; el.style.left = '0px'; el.style.top = '-9999px';
+    labels.appendChild(el); return el;
+  });
+  const labPerPx = labEls.map(el => el.offsetWidth / 100);     // width / font-size
+  const LABF = 0.62;                                              // heading font size = 0.62 uL
+
+  const colW = S.columns.map(c => { const g = colGaps(c); return specWidth(c.spec, g.cg, g.gg); });
+  const nGap = S.columns.length - 1;
+  // width at full size (u = uL/LS = fit): each column = max(flaps, heading)
+  const KW = colW.reduce((a, w, i) => a + Math.max(w, labPerPx[i] * LABF * LS), 0) + nGap * B.columnGapUnits;
+  const clockH = S.clockCells.length ? cellH * sc : 0;
+  const rowsH = B.rows * cellH + (B.rows - 1) * B.rowGapUnits;
+  const fitUnits = 0.8 + clockH + 0.9 + 1.0 + 0.35 + rowsH + 0.8;
+  const fit = Math.min(W / (KW + 2.4), (H - BAR) / fitUnits);
+  const uL = Math.max(3, fit * LS);
+  const u = Math.max(2, fit * S.size);
+  const labPx = LABF * uL, titlePx = 0.95 * uL;
+  const slot = colW.map((w, i) => Math.max(w * u, labPerPx[i] * labPx));
+  const boardPx = slot.reduce((a, b) => a + b, 0) + nGap * B.columnGapUnits * u;
+  const labRow = labPx * 1.25 + 0.3 * u;
+  const totalH = 0.8 * u + clockH * u + Math.max(0.9 * u, labPx) + labRow + rowsH * u;
+  const x0 = (W - boardPx) / 2;
+  let y = DEC + Math.max(8, ((H - BAR) - totalH) / 2);
+
+  // master clock, top centre
+  const clockTop = y;
+  if (S.clockCells.length) {
+    const cw = specWidth(S.clockSpec, B.cellGapUnits, B.gapUnits) * u * sc;
+    let cx = (W - cw) / 2; const ch = cellH * u * sc;
+    S.clockSpec.forEach((dn, k) => {
+      const wu = dn === 'gap' ? B.gapUnits : S.fields.drums[dn].widthUnits;
+      const c = S.clockCells[k];
+      if (c) { c.w = wu * u * sc - 0.001; c.h = ch; c.x = cx + c.w / 2; c.y = y + ch / 2; }
+      cx += (wu + B.cellGapUnits) * u * sc;
+    });
+    y += ch + Math.max(0.9 * u, labPx);
+  }
+  // title (left edge of board, level with clock)
+  const title = $('title');
+  title.textContent = S.schedule.title || '';
+  title.style.fontSize = titlePx + 'px';
+  title.style.left = x0 + 'px';
+  title.style.top = (S.clockCells.length ? clockTop + (clockH * u - titlePx * 1.15) / 2 : y - titlePx * 1.5) + 'px';
+
+  // column headings: left-aligned over their column (right-aligned for right-aligned fields)
+  let x = x0;
+  S.columns.forEach((col, ci) => {
+    col.x = x; col.slot = slot[ci]; col.w = colW[ci] * u;
+    const el = labEls[ci];
+    el.style.fontSize = labPx + 'px'; el.style.top = y + 'px';
+    if (col.def.align === 'right') { el.style.left = ''; el.style.right = (W - (x + slot[ci])) + 'px'; }
+    else el.style.left = x + 'px';
+    x += slot[ci] + B.columnGapUnits * u;
+  });
+  y += labRow;
+
+  // rows (right-aligned fields sit at the right edge of their slot)
+  for (let r = 0; r < B.rows; r++) {
+    const cy = y + r * (cellH + B.rowGapUnits) * u + cellH * u / 2;
+    for (const col of S.columns) {
+      const g = colGaps(col);
+      let cx = col.def.align === 'right' ? col.x + col.slot - col.w : col.x;
+      col.spec.forEach((dn, k) => {
+        const wu = dn === 'gap' ? g.gg : S.fields.drums[dn].widthUnits;
+        const c = S.rowCells[r][col.id][k];
+        if (c) { c.w = wu * u; c.h = cellH * u; c.x = cx + c.w / 2; c.y = cy; }
+        cx += (wu + g.cg) * u;
+      });
+    }
+  }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));   // re-read: can change when the window moves between monitors
+  const WH = window.innerHeight;                   // (A11: H above excludes the icon bands)
+  renderer.setSize(W, WH, true);                   // true = also set the canvas CSS size (A7 bug: at 150% Windows scaling it was drawn 1.5x too big)
+  camera.left = 0; camera.right = W; camera.top = 0; camera.bottom = -WH; camera.updateProjectionMatrix();
+  S.layout = { u, uL, W, H };
+  if (REC.take) buildOverlay();       // A12: keep the movie's headings / icon bands in step with the page
+}
+
+/* ---------- instanced mesh ---------- */
+function buildMesh() {
+  if (S.mesh) { scene.remove(S.mesh); S.geo.dispose(); S.mesh.material.dispose(); }
+  const n = S.cells.length * 3;
+  const geo = new THREE.InstancedBufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-.5,0,0, .5,0,0, .5,1,0, -.5,1,0]), 3));
+  geo.setIndex([0, 1, 2, 0, 2, 3]);
+  const A = {
+    aCenter: new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3),
+    aSize:   new THREE.InstancedBufferAttribute(new Float32Array(n * 2), 2),
+    aKind:   new THREE.InstancedBufferAttribute(new Float32Array(n), 1),
+    aUVa:    new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4),
+    aUVb:    new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4),
+    aAngle:  new THREE.InstancedBufferAttribute(new Float32Array(n), 1),
+  };
+  for (const k of ['aUVa', 'aUVb', 'aAngle']) A[k].setUsage(THREE.DynamicDrawUsage);
+  for (const [k, v] of Object.entries(A)) geo.setAttribute(k, v);
+  geo.instanceCount = n;
+  const mat = new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: FS,
+    uniforms: { uAtlas: { value: S.atlas.tex } }, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false;
+  scene.add(mesh);
+  S.mesh = mesh; S.geo = geo; S.attrs = A;
+  for (let i = 0; i < S.cells.length; i++) A.aKind.array[i * 3 + 2] = 2, A.aKind.array[i * 3 + 1] = 1;
+  writeStatic();
+  for (const c of S.cells) writeCell(c, 0);
+  markDirty();
+}
+function writeStatic() {
+  const A = S.attrs;
+  for (const c of S.cells) for (let k = 0; k < 3; k++) {
+    const j = c.i * 3 + k;
+    A.aCenter.array.set([c.x, -c.y, 0], j * 3);
+    A.aSize.array.set([c.w, c.h], j * 2);
+  }
+  A.aCenter.needsUpdate = true; A.aSize.needsUpdate = true;
+}
+function uv(c, idx) { return S.atlas.map[c.drum][c.glyphs[idx]]; }
+function writeCell(c, now) {
+  const A = S.attrs, j = c.i * 3;
+  const active = c.flipping && now >= c.t0;
+  const upper = active ? c.next : c.cur;
+  A.aUVa.array.set(uv(c, upper), j * 4);            // upper static half
+  A.aUVa.array.set(uv(c, c.cur), (j + 1) * 4);      // lower static half
+  if (active) {
+    let s = Math.min(1, (now - c.t0) / S.flapMs);
+    s = Math.pow(s, 1.6);                           // gravity: the leaf accelerates as it falls
+    A.aUVa.array.set(uv(c, c.cur), (j + 2) * 4);
+    A.aUVb.array.set(uv(c, c.next), (j + 2) * 4);
+    A.aAngle.array[j + 2] = s * Math.PI;
+  } else A.aAngle.array[j + 2] = -1;
+}
+function markDirty() { const A = S.attrs; A.aUVa.needsUpdate = A.aUVb.needsUpdate = A.aAngle.needsUpdate = true; }
+
+/* ---------- targets ---------- */
+function setTarget(c, idx, now, stagger) {
+  if (c.static) return;
+  c.target = idx;
+  if (!c.flipping && c.cur !== idx) {
+    c.flipping = true;
+    c.t0 = now + Math.random() * stagger;
+    c.next = (c.cur + 1) % c.glyphs.length;
+  }
+}
+function textFor(col, value) {
+  const B = S.fields.board;
+  let s = value == null ? '' : String(value);
+  if (B.uppercase !== false) s = s.toUpperCase();
+  const n = col.spec.length;
+  s = s.slice(0, n);
+  return col.def.align === 'right' ? s.padStart(n, ' ') : s.padEnd(n, ' ');
+}
+function glyphsFor(col, value) {        // -> array of glyph strings, one per spec entry
+  const t = S.fields.types[col.def.type];
+  if (t.kind === 'time') {
+    const v = value == null ? '' : String(value).trim();
+    if (!v) return col.spec.map(dn => dn === 'colon' ? ':' : ' ');
+    const p = clockParts(parseClock(v));
+    const hh = String(p.h12).padStart(2, ' '), mm = String(p.m).padStart(2, '0');
+    const digits = [hh[0], hh[1], mm[0], mm[1]]; let di = 0;
+    return col.spec.map(dn => dn === 'digit' ? digits[di++] : dn === 'colon' ? ':' : dn.startsWith('ampm') ? p.ap : ' ');   // A11: ampm or ampmIcon
+  }
+  return textFor(col, value).split('');
+}
+function applyRow(r, now, stagger) {
+  const row = S.rows[r];
+  for (const col of S.columns) {
+    const gl = glyphsFor(col, row[col.id]);
+    S.rowCells[r][col.id].forEach((c, k) => {
+      if (!c) return;
+      const idx = c.index.get(gl[k]);
+      setTarget(c, idx === undefined ? 0 : idx, now, stagger);
+    });
+  }
+}
+
+/* ---------- schedule ---------- */
+function prepSchedule() {
+  const sc = S.schedule;
+  S.start = parseClock(sc.startTime);
+  S.end = sc.endTime ? parseClock(sc.endTime) : S.start + 86400;
+  if (S.end <= S.start) S.end += 86400;
+  S.loop = sc.loop !== false;
+  S.events = (sc.events || []).map((e, n) => {
+    let t = parseClock(e.t); if (t < S.start) t += 86400;       // allow schedules that cross midnight
+    return { t, row: e.row, set: e.set || {}, n };
+  }).sort((a, b) => a.t - b.t || a.n - b.n);
+}
+function blankRows() {
+  S.rows = [];
+  for (let r = 0; r < S.fields.board.rows; r++) {
+    const o = {}; for (const c of S.columns) o[c.id] = ''; S.rows.push(o);
+  }
+}
+function rebuildStateAt(now) {          // after reset / loop / load: recompute from scratch
+  blankRows(); S.evIdx = 0;
+  while (S.evIdx < S.events.length && S.events[S.evIdx].t <= S.clock) {
+    const e = S.events[S.evIdx++];
+    if (S.rows[e.row]) Object.assign(S.rows[e.row], e.set);
+  }
+  for (let r = 0; r < S.rows.length; r++) applyRow(r, now, S.fields.board.flapStaggerMs);
+}
+function advanceEvents(now) {
+  const touched = new Set();
+  while (S.evIdx < S.events.length && S.events[S.evIdx].t <= S.clock) {
+    const e = S.events[S.evIdx++];
+    if (S.rows[e.row]) { Object.assign(S.rows[e.row], e.set); touched.add(e.row); }
+  }
+  for (const r of touched) applyRow(r, now, S.fields.board.flapStaggerMs);
+}
+function updateClockCells(now) {
+  if (!S.clockCells.length) return;
+  const sec = Math.floor(S.clock);
+  if (sec === S.lastSec) return;
+  S.lastSec = sec;
+  const p = clockParts(sec);
+  const hh = String(p.h12).padStart(2, ' '), mm = String(p.m).padStart(2, '0'), ss = String(p.s).padStart(2, '0');
+  const gl = [hh[0], hh[1], ':', mm[0], mm[1], ':', ss[0], ss[1], ' ', p.ap];
+  S.clockCells.forEach((c, k) => { if (c) { const i = c.index.get(gl[k]); setTarget(c, i === undefined ? 0 : i, now, 0); } });
+}
+
+/* =====================================================================
+   Sound: one.wav, first strike, pitch-jittered, panned by column,
+   voices capped per frame, through a compressor so a full-board change roars.
+   ===================================================================== */
+const Snd = { ctx: null, buf: null, out: null, on: true, vol: 0.7, cfg: {} };
+function b64ToBuf(b64) { const s = atob(b64), a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a.buffer; }
+async function initSound(cfg) {
+  Snd.cfg = cfg || {};
+  Snd.on = cfg.enabled !== false; Snd.vol = cfg.volume != null ? cfg.volume : 1.0;
+  const pv = pref('vol'); if (pv != null) Snd.vol = pv;
+  $('vol').value = Math.round(Snd.vol * 100); showSnd();
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    Snd.ctx = new AC();
+    // voices -> volume -> compressor -> make-up gain -> brick-wall limiter -> speakers
+    Snd.out = Snd.ctx.createGain(); Snd.out.gain.value = Snd.vol;
+    Snd.out.connect(buildChain(Snd.ctx, cfg, Snd.ctx.destination));
+    let ab;
+    try { const r = await fetch(cfg.file || 'audio/one.wav'); if (!r.ok) throw 0; ab = await r.arrayBuffer(); }
+    catch (e) { ab = b64ToBuf(window.SOLARI_EMBEDDED.soundBase64); }
+    Snd.buf = await Snd.ctx.decodeAudioData(ab);
+  } catch (e) { console.warn('sound unavailable', e); }
+  checkAudioUnlock();
+}
+// The speaker chain; A12 builds the very same chain in an OfflineAudioContext for the movie's sound.
+function buildChain(ac, cfg, dest) {
+  const comp = ac.createDynamicsCompressor();
+  comp.threshold.value = -20; comp.knee.value = 4; comp.ratio.value = 4; comp.attack.value = 0.001; comp.release.value = 0.10;
+  const makeup = ac.createGain(); makeup.gain.value = cfg.loudness != null ? cfg.loudness : 2.5;
+  const lim = ac.createDynamicsCompressor();
+  lim.threshold.value = -3; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.0005; lim.release.value = 0.05;
+  comp.connect(makeup); makeup.connect(lim); lim.connect(dest);
+  return comp;
+}
+// One clack voice v = {rate, g, pan, off, dur} starting at context time st.
+function startVoice(ac, dest, buf, v, st) {
+  const src = ac.createBufferSource(); src.buffer = buf; src.playbackRate.value = v.rate;
+  const g = ac.createGain();
+  g.gain.setValueAtTime(v.g, st); g.gain.setValueAtTime(v.g, st + v.dur * 0.8); g.gain.linearRampToValueAtTime(0, st + v.dur);
+  let node = g;
+  if (ac.createStereoPanner) { const p = ac.createStereoPanner(); p.pan.value = v.pan; g.connect(p); node = p; }
+  src.connect(g); node.connect(dest);
+  src.start(st, v.off, v.dur);
+}
+function checkAudioUnlock() {
+  $('toast').style.display = (Snd.ctx && Snd.ctx.state !== 'running' && Snd.on) ? 'block' : 'none';
+}
+function unlockAudio() { if (Snd.ctx && Snd.ctx.state !== 'running') Snd.ctx.resume().then(checkAudioUnlock); }
+function playClacks(landings) {         // landings: array of x in 0..1
+  if (!Snd.on || !Snd.buf || !landings.length) return;
+  const live = !!(Snd.ctx && Snd.ctx.state === 'running');
+  if (!live && !REC.take) return;
+  const cfg = Snd.cfg, maxV = cfg.maxVoicesPerFrame || 5, n = landings.length, v = Math.min(n, maxV);
+  const sl = cfg.slice || [0, Snd.buf.duration], off = sl[0], dur = Math.min(sl[1], Snd.buf.duration) - off;
+  const g0 = Math.min(1.8, Math.sqrt(n / v));
+  landings.sort((a, b) => a - b);
+  const t = live ? Snd.ctx.currentTime : 0;
+  const tMovie = REC.take ? REC.take.frames / REC.fps : 0;     // A12: the movie time of the frame being drawn
+  for (let k = 0; k < v; k++) {
+    const x = landings[Math.floor((k + 0.5) * n / v)];
+    const voice = { rate: 1 + (Math.random() * 2 - 1) * (cfg.pitchJitter || 0), g: g0 * (0.8 + Math.random() * 0.25),
+      pan: (x * 2 - 1) * (cfg.stereoSpread || 0), off, dur };
+    const delay = Math.random() * 0.014;
+    if (live) startVoice(Snd.ctx, Snd.out, Snd.buf, voice, t + delay);
+    if (REC.take) REC.voices.push(Object.assign({}, voice, { t: tMovie + delay, g: voice.g * Snd.vol }));   // volume folded in
+  }
+}
+function showSnd() { const b = $('bSnd'); b.textContent = Snd.on ? 'Sound ON' : 'Sound OFF'; b.classList.toggle('on', Snd.on); }
+
+/* ---------- main loop ---------- */
+let lastT = performance.now();
+let simNow = 0;            // A12: the sign's own clock in ms (flap timing). Real time normally; exactly 1/fps per frame while recording.
+function frame(realNow) {
+  requestAnimationFrame(frame);
+  let dtMs = realNow - lastT; lastT = realNow;
+  if (REC.take) {
+    if (REC.take.busy()) return;                    // let the encoder catch up; the sign waits (the movie is unaffected)
+    dtMs = 1000 / REC.fps;
+  }
+  simNow += dtMs;
+  const now = simNow, dt = dtMs / 1000;
+  if (S.running) {
+    S.clock += dt * SPEEDS[S.speedIdx];
+    if (S.clock >= S.end) {
+      if (S.loop) { S.clock = S.start; rebuildStateAt(now); }
+      else { S.clock = S.end; S.running = false; showRun(); }
+    }
+    advanceEvents(now);
+  }
+  updateClockCells(now);
+
+  // flap mechanics
+  const land = [], clockSound = S.clockSound;
+  let any = false;
+  for (const c of S.cells) {
+    if (!c.flipping) continue;
+    any = true;
+    if (now >= c.t0 + S.flapMs) {
+      // one or more flaps landed (more than one only if the tab was asleep)
+      let steps = Math.floor((now - c.t0) / S.flapMs);
+      while (steps-- > 0 && c.flipping) {
+        c.cur = c.next;
+        if (c.cur === c.target) c.flipping = false;
+        else { c.next = (c.cur + 1) % c.glyphs.length; c.t0 += S.flapMs; }
+      }
+      if (c.flipping && now - c.t0 > S.flapMs) c.t0 = now;
+      if (!c.isClock || clockSound) land.push(c.x / S.layout.W);
+    }
+    writeCell(c, now);
+  }
+  if (any) markDirty();
+  playClacks(land);
+  renderer.render(scene, camera);
+  if (REC.take) recFrame();
+}
+
+/* ---------- controls ---------- */
+function pref(k, v) {                  // remember size/volume per browser (optional; ignored if storage is blocked)
+  try { if (v === undefined) { const x = localStorage.getItem(NAME + '.' + k); return x == null ? null : +x; }
+        localStorage.setItem(NAME + '.' + k, String(v)); } catch (e) { return null; }
+}
+function showSize() { $('sizev').textContent = Math.round(S.size * 100) + '%'; }
+function setSize(v) {
+  S.size = Math.round(Math.max(0.2, Math.min(1, v)) * 100) / 100; showSize(); pref('size', S.size);
+  if (S.mesh) { layout(); writeStatic(); }
+}
+function flash(msg) {                  // brief on-screen note (used by the C key)
+  const t = $('toast'); t.textContent = msg; t.style.display = 'block';
+  clearTimeout(flash.h); flash.h = setTimeout(() => { t.textContent = 'Click anywhere to enable sound'; checkAudioUnlock(); }, 1200);
+}
+function showRun() { $('bFwd').classList.toggle('on', S.running); $('bStop').classList.toggle('on', !S.running); }
+function showSpeed() { const v = SPEEDS[S.speedIdx]; $('speedv').innerHTML = (v < 10 ? v.toFixed(2) : v.toFixed(0)) + '&times;'; }
+function forward() { S.running = true; lastT = performance.now(); showRun(); }
+function stop() { S.running = false; showRun(); }
+function reset() { S.clock = S.start; S.lastSec = -1; rebuildStateAt(simNow); }
+function speed(d) { S.speedIdx = Math.max(0, Math.min(SPEEDS.length - 1, S.speedIdx + d)); showSpeed(); }
+$('bFwd').onclick = forward; $('bStop').onclick = stop; $('bReset').onclick = reset;
+$('bSlow').onclick = () => speed(-1); $('bFast').onclick = () => speed(1);
+$('bSmall').onclick = () => setSize(S.size - 0.05); $('bBig').onclick = () => setSize(S.size + 0.05);
+$('b1x').onclick = () => { S.speedIdx = SPEEDS.indexOf(1); showSpeed(); };
+$('bSnd').onclick = () => { Snd.on = !Snd.on; showSnd(); unlockAudio(); checkAudioUnlock(); };
+$('vol').oninput = e => { Snd.vol = e.target.value / 100; pref('vol', Snd.vol); if (Snd.out) Snd.out.gain.value = Snd.vol; };
+// A11: icon bands on / off (remembered)
+S.decorOn = pref('icons') !== 0;
+function showIcons() { $('bIcons').textContent = 'Icons ' + (S.decorOn ? 'ON' : 'OFF'); $('bIcons').classList.toggle('on', S.decorOn); }
+showIcons();
+$('bIcons').onclick = () => { S.decorOn = !S.decorOn; pref('icons', S.decorOn ? 1 : 0); showIcons(); if (S.mesh) { layout(); writeStatic(); } else sizeDecor(); };
+$('bLoad').onclick = () => $('file').click();
+$('file').onchange = async e => {
+  let f = S.fields, s = S.schedule, names = [];
+  for (const file of e.target.files) {
+    try {
+      const j = JSON.parse(await file.text());
+      if (j.columns && j.drums) f = j; else if (j.events) s = j; else throw new Error('not a fields or schedule file');
+      names.push(file.name);
+    } catch (err) { alert(file.name + ': ' + err.message); }
+  }
+  e.target.value = '';
+  if (names.length) { await start(f, s); $('src').textContent = 'Loaded ' + names.join(' + '); }
+};
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); S.running ? stop() : forward(); }
+  else if (e.key === 'r' || e.key === 'R') reset();
+  else if (e.key === '+' || e.key === '=') speed(1);
+  else if (e.key === '-' || e.key === '_') speed(-1);
+  else if (e.key === '1') { S.speedIdx = SPEEDS.indexOf(1); showSpeed(); }
+  else if (e.key === 'm' || e.key === 'M') $('bSnd').click();
+  else if (e.key === 'c' || e.key === 'C') { S.clockSound = !S.clockSound; flash('Clock clack ' + (S.clockSound ? 'ON' : 'OFF')); }
+  else if (e.key === 'i' || e.key === 'I') $('bIcons').click();
+  else if (e.key === 'v' || e.key === 'V') recToggle();
+  else if (e.key === '[') setSize(S.size - 0.05);
+  else if (e.key === ']') setSize(S.size + 0.05);
+});
+window.addEventListener('pointerdown', unlockAudio);
+window.addEventListener('keydown', unlockAudio);
+$('toast').onclick = unlockAudio;
+window.addEventListener('resize', () => { if (S.mesh) { layout(); writeStatic(); } });
+document.addEventListener('visibilitychange', () => { lastT = performance.now() - 0; });
+
+/* ---------- A11: pictures for flap faces ----------
+   Pictures painted into the WebGL atlas must not 'taint' the canvas, and a page opened by double-click (file://)
+   counts its own folder as a foreign site. So the atlas uses the small copies in CT40.A12.Solari.icons.js
+   (data URLs, always allowed); a picture missing there is read from its file when the page is served. */
+S.images = {};
+function loadImage(path) {
+  const emb = (window.SOLARI_ICONS || {})[path];
+  if (!emb && location.protocol === 'file:') return Promise.resolve(null);
+  return new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = emb || encodeURI(path); });
+}
+async function loadImages(fields) {
+  const want = new Set();
+  for (const d of Object.values(fields.drums)) if (d && d.images) for (const p of Object.values(d.images)) want.add(p);
+  await Promise.all([...want].filter(p => !(p in S.images)).map(async p => { S.images[p] = await loadImage(p); }));
+}
+/* ---------- A11: icon bands along the top and bottom of the sign (the user's pictures, whole) ---------- */
+function buildDecor(fields) {
+  const D = fields.decor || {};
+  S.decor = D;
+  for (const [id, list] of [['decTop', D.top || []], ['decBot', D.bottom || []]]) {
+    const el = $(id); el.innerHTML = ''; el.dataset.list = JSON.stringify(list);
+  }
+  sizeDecor();
+}
+function decorH() {
+  const D = S.decor || {};
+  if (!D.show || !S.decorOn) return 0;
+  return Math.round(Math.max(D.minPx || 44, Math.min(D.maxPx || 120, (D.height || 0.085) * window.innerHeight)));
+}
+function sizeDecor() {
+  const D = S.decor || {}, h = decorH(), W = window.innerWidth, BAR = $('bar').offsetHeight || 52, gap = D.gapPx || 10;
+  for (const [id, top] of [['decTop', true], ['decBot', false]]) {
+    const el = $(id), list = JSON.parse(el.dataset.list || '[]');
+    el.style.display = h && list.length ? 'flex' : 'none'; if (!h || !list.length) continue;
+    el.style.height = h + 'px'; el.style.gap = gap + 'px';
+    if (top) { el.style.top = '0px'; el.style.bottom = ''; } else { el.style.top = ''; el.style.bottom = BAR + 'px'; }
+    const pad = Math.round(h * 0.08), side = h - 2 * pad;
+    const n = D.repeat === false ? list.length : Math.max(list.length, Math.floor((W - 24 + gap) / (side + gap)));
+    if (el.childElementCount !== n || el.dataset.side != side) {
+      el.innerHTML = ''; el.dataset.side = side;
+      for (let k = 0; k < n; k++) { const im = document.createElement('img'); im.src = encodeURI(list[k % list.length]); im.alt = ''; im.dataset.path = list[k % list.length]; el.appendChild(im); }
+    }
+    el.style.padding = pad + 'px 12px';
+    el.querySelectorAll('img').forEach(im => { im.style.width = side + 'px'; im.style.height = side + 'px'; });
+  }
+}
+
+/* =====================================================================
+   A12: movie recording -- "● Record from Reset" (V key)
+   One press: reset the sign to its start time, set it running, and record.
+   Press again: stop; the MP4 (picture + clacks) downloads.
+   - The movie is the page above the control bar: the flaps (WebGL), the title,
+     the column headings and the icon bands, at the window's real device-pixel
+     size. Buttons, notes and the toast are not in it.
+   - While recording, each drawn frame advances the sign by exactly 1/fps
+     (flaps and master clock), so the movie runs at the speed you chose
+     (1x = real time) even if the screen itself slows down. No batch process.
+   - Every clack is logged with its movie time; on stop, the same Web Audio
+     chain the speakers use renders them (OfflineAudioContext) -> AAC.
+   ===================================================================== */
+const even = v => Math.max(2, Math.round(v / 2) * 2);
+function recRegionCss() { return { w: window.innerWidth, h: window.innerHeight - ($('bar').offsetHeight || 52) }; }
+// small copies of the pictures (data URLs) -- drawing the original files from a double-clicked page would block the movie
+for (const [path, url] of Object.entries(window.SOLARI_ICONS || {})) { const im = new Image(); im.src = url; REC.imgs[path] = im; }
+
+function buildOverlay() {                  // headings + icon bands, painted once into a transparent layer
+  const cv = REC.overlay, g = cv.getContext('2d'), k = REC.W / window.innerWidth;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
+  for (const [id, top] of [['decTop', true], ['decBot', false]]) {
+    const el = $(id); if (el.style.display === 'none') continue;
+    const r = el.getBoundingClientRect();
+    g.fillStyle = '#000'; g.fillRect(r.left * k, r.top * k, r.width * k, r.height * k);
+    g.fillStyle = '#2a2a2a'; g.fillRect(r.left * k, (top ? r.bottom - 1 : r.top) * k, r.width * k, Math.max(1, k));
+    el.querySelectorAll('img').forEach(im => {
+      const q = im.getBoundingClientRect(), pic = REC.imgs[im.dataset.path];
+      if (!pic || !pic.complete || !pic.naturalWidth || q.right < r.left || q.left > r.right) return;
+      const x = q.left * k, y = q.top * k, w = q.width * k, h = q.height * k, rad = 3 * k;
+      g.save(); g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, rad) : g.rect(x, y, w, h); g.clip();
+      const sc = Math.min(w / pic.naturalWidth, h / pic.naturalHeight), iw = pic.naturalWidth * sc, ih = pic.naturalHeight * sc;
+      g.drawImage(pic, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih); g.restore();
+      g.strokeStyle = '#262626'; g.lineWidth = Math.max(1, k); g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, rad) : g.rect(x, y, w, h); g.stroke();
+    });
+  }
+  const texts = [$('title'), ...$('labels').querySelectorAll('.lab')];
+  for (const el of texts) {
+    const txt = el.textContent; if (!txt) continue;
+    const cs = getComputedStyle(el), r = el.getBoundingClientRect();
+    g.font = `${cs.fontWeight} ${parseFloat(cs.fontSize) * k}px ${cs.fontFamily}`;
+    if ('letterSpacing' in g) g.letterSpacing = (parseFloat(cs.letterSpacing) || 0) * k + 'px';
+    g.fillStyle = cs.color; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    const m = g.measureText(txt), asc = m.fontBoundingBoxAscent || parseFloat(cs.fontSize) * k * 0.8, des = m.fontBoundingBoxDescent || parseFloat(cs.fontSize) * k * 0.2;
+    g.fillText(txt, r.left * k, r.top * k + (r.height * k - (asc + des)) / 2 + asc);
+  }
+  if ('letterSpacing' in g) g.letterSpacing = '0px';
+}
+function recFrame() {                      // called right after renderer.render(), while the WebGL picture is still there
+  const g = REC.g, gl = renderer.domElement, rc = recRegionCss(), pr = gl.width / window.innerWidth;
+  g.fillStyle = S.fields.board.colors.background; g.fillRect(0, 0, REC.W, REC.H);
+  const sh = Math.min(gl.height, Math.round(rc.h * pr));
+  g.drawImage(gl, 0, 0, gl.width, sh, 0, 0, REC.W, sh * REC.W / gl.width);
+  g.drawImage(REC.overlay, 0, 0);
+  REC.take.add(null);
+  if (REC.take.frames % 15 === 1) showRec();
+}
+function fmtDur(t) { const m = Math.floor(t / 60), s = Math.floor(t % 60); return m + ':' + String(s).padStart(2, '0'); }
+function showRec(msg) {
+  const b = $('bRec'), on = !!REC.take;
+  b.innerHTML = on ? '&#9632; Stop &amp; save movie' : '&#9679; Rec from Reset';
+  b.classList.toggle('rec', on); b.classList.toggle('busy', REC.starting || REC.finishing);
+  $('recv').textContent = msg != null ? msg : on ? `REC ${fmtDur(REC.take.seconds)} · ${REC.W}×${REC.H} ${REC.fps} fps` : (REC.last || '');
+}
+async function recToggle() {
+  if (REC.starting || REC.finishing) return;
+  if (REC.take) return recStop();
+  if (!SolariRec.supported()) { alert('This browser cannot make movies (it needs WebCodecs: Chrome or Edge 94 or later).'); return; }
+  unlockAudio();
+  REC.starting = true; showRec('Preparing the encoder…');
+  try {
+    const rc = recRegionCss(), pr = renderer.getPixelRatio();
+    let W = rc.w * pr, H = rc.h * pr; const fit = Math.min(1, 3840 / W, 2160 / H);
+    REC.W = even(W * fit); REC.H = even(H * fit);
+    const pick = await SolariRec.prepare(REC.W, REC.H, REC.fps, REC.SR);
+    if (!pick) throw new Error('no video encoder worked at ' + REC.W + '×' + REC.H + '.\n' + SolariRec.tried.join('\n'));
+    const apick = Snd.buf ? SolariRec.audioPick : null;
+    REC.comp = document.createElement('canvas'); REC.comp.width = REC.W; REC.comp.height = REC.H;
+    REC.g = REC.comp.getContext('2d', { alpha: false });
+    REC.overlay = document.createElement('canvas'); REC.overlay.width = REC.W; REC.overlay.height = REC.H;
+    REC.voices = [];
+    REC.take = SolariRec.Take(REC.comp, REC.W, REC.H, REC.fps, REC.SR, pick, apick);
+    REC.codec = pick.name + (apick ? ' + ' + (apick.mux === 'aac' ? 'AAC' : 'Opus') : ' (no sound encoder)');
+    buildOverlay();
+    reset(); forward();                    // the take starts from a reset, running
+  } catch (e) { REC.take = null; alert('Could not start recording: ' + (e && e.message || e)); }
+  REC.starting = false; showRec();
+}
+async function renderMovieAudio(take, nTotal) {   // the logged clacks -> the movie's sound, in 30 s pieces
+  const SR = REC.SR, SEG = 30 * SR, PRE = SR, cfg = Snd.cfg || {};
+  const voices = REC.voices.slice().sort((a, b) => a.t - b.t);
+  let vi = 0;
+  for (let s0 = 0; s0 < nTotal; s0 += SEG) {
+    const a = Math.max(0, s0 - PRE), b = Math.min(nTotal, s0 + SEG);   // a: 1 s of run-up so the compressor is settled
+    const oc = new OfflineAudioContext(2, b - a, SR);
+    const inp = buildChain(oc, cfg, oc.destination);
+    while (vi < voices.length && voices[vi].t * SR < a) vi++;
+    for (let j = vi; j < voices.length && voices[j].t * SR < b; j++) startVoice(oc, inp, Snd.buf, voices[j], voices[j].t - a / SR);
+    const ab = await oc.startRendering();
+    const L = ab.getChannelData(0), R = ab.numberOfChannels > 1 ? ab.getChannelData(1) : L;
+    for (let p = s0; p < b; p += 4800) {
+      const n = Math.min(4800, b - p), d = new Float32Array(n * 2);
+      d.set(L.subarray(p - a, p - a + n), 0); d.set(R.subarray(p - a, p - a + n), n);
+      take.addAudio(d);
+      while (take.audioBusy()) await new Promise(r => setTimeout(r, 5));
+    }
+    showRec('Saving… sound ' + Math.round(100 * b / nTotal) + '%');
+  }
+}
+async function recStop() {
+  const take = REC.take; REC.take = null; REC.finishing = true; showRec('Saving…');
+  try {
+    if (!take.frames) throw new Error('no frames were recorded');
+    const nTotal = Math.round(take.frames * REC.SR / REC.fps);
+    if (take.hasAudio && Snd.buf) await renderMovieAudio(take, nTotal);
+    const blob = await take.finish();
+    const d = new Date(), z = v => String(v).padStart(2, '0');
+    const fname = `${NAME}_${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}${z(d.getSeconds())}.mp4`;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    REC.last = `Saved ${fname} · ${fmtDur(take.seconds)} · ${take.w}×${take.h} ${take.fps} fps · ${(blob.size / 1e6).toFixed(1)} MB`;
+    REC.lastBlob = blob;
+    console.log(REC.last, REC.codec);
+  } catch (e) { REC.last = 'Recording failed'; alert('Recording failed: ' + (e && e.message || e)); }
+  REC.finishing = false; lastT = performance.now(); showRec();
+}
+$('bRec').onclick = recToggle;
+
+/* ---------- start ---------- */
+async function start(fields, schedule) {
+  await loadImages(fields);
+  buildDecor(fields);
+  S.fields = fields; S.schedule = schedule;
+  S.flapMs = fields.board.flapMs || 110;
+  S.clockSound = !!(fields.clock && fields.clock.sound !== false);
+  const ps = pref('size'); S.size = ps != null ? ps : (fields.board.size || 0.7); showSize();
+  document.body.style.background = fields.board.colors.background;
+  renderer.setClearColor(fields.board.colors.background);
+  if (S.atlas) S.atlas.tex.dispose();
+  S.atlas = buildAtlas(fields);
+  buildCells();
+  prepSchedule();
+  layout();
+  buildMesh();
+  S.clock = S.start; S.lastSec = -1;
+  rebuildStateAt(simNow);
+}
+(async () => {
+  const d = await loadData();
+  $('src').textContent = d.src;
+  await start(d.fields, d.schedule);
+  showRun(); showSpeed();
+  initSound(d.fields.sound || {});
+  window.SOLARI = S;                     // handy for debugging in the console
+  requestAnimationFrame(t => { lastT = t; frame(t); });
+  if (QS.get('rec') === '1') setTimeout(recToggle, 500);     // A12 test hook: start recording on opening
+})().catch(e => fail(String(e && e.message || e)));
+</script>
+</body>
+</html>
